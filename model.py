@@ -101,7 +101,7 @@ class CPPNVAE():
     # Draw one sample z from Gaussian distribution
     eps = tf.random_normal((self.batch_size, self.z_dim), 0, 1, dtype=tf.float32)
     # z = mu + sigma*epsilon
-    self.z = tf.add(self.z_mean, tf.mul(tf.sqrt(tf.exp(self.z_log_sigma_sq)), eps))
+    self.z = tf.add(self.z_mean, tf.multiply(tf.sqrt(tf.exp(self.z_log_sigma_sq)), eps))
 
     # Use generator to determine mean of
     # Bernoulli distribution of reconstructed input
@@ -135,10 +135,10 @@ class CPPNVAE():
     g_optimizer = tf.train.AdamOptimizer(self.learning_rate_g, beta1=self.beta1)
     vae_optimizer = tf.train.AdamOptimizer(self.learning_rate_vae, beta1=self.beta1)
 
-    self.d_opt_real = d_real_optimizer.apply_gradients(zip(d_opt_real_grads, self.d_vars))
-    self.d_opt = d_optimizer.apply_gradients(zip(d_opt_grads, self.d_vars))
-    self.g_opt = g_optimizer.apply_gradients(zip(g_opt_grads, self.both_vars))
-    self.vae_opt = vae_optimizer.apply_gradients(zip(vae_opt_grads, self.q_vars))
+    self.d_opt_real = d_real_optimizer.apply_gradients(list(zip(d_opt_real_grads, self.d_vars)))
+    self.d_opt = d_optimizer.apply_gradients(list(zip(d_opt_grads, self.d_vars)))
+    self.g_opt = g_optimizer.apply_gradients(list(zip(g_opt_grads, self.both_vars)))
+    self.vae_opt = vae_optimizer.apply_gradients(list(zip(vae_opt_grads, self.q_vars)))
 
     '''
     self.d_opt_real = tf.train.AdamOptimizer(self.learning_rate_d, beta1=self.beta1) \
@@ -159,12 +159,12 @@ class CPPNVAE():
     '''
 
     self.init()
-    self.saver = tf.train.Saver(tf.all_variables())
+    self.saver = tf.train.Saver(tf.global_variables())
 
   def init(self):
 
     # Initializing the tensor flow variables
-    init = tf.initialize_all_variables()
+    init = tf.global_variables_initializer()
     # Launch the session
     self.sess = tf.InteractiveSession()
     self.sess.run(init)
@@ -270,51 +270,53 @@ class CPPNVAE():
 
   def discriminator(self, image, reuse=False):
 
-    if reuse:
-        tf.get_variable_scope().reuse_variables()
+    with tf.variable_scope('discriminator') as scope:
+        if reuse:
+            scope.reuse_variables()
 
-    h0 = lrelu(conv2d(image, self.df_dim, name=self.model_name+'_d_h0_conv'))
-    h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim*2, name=self.model_name+'_d_h1_conv')))
-    h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name=self.model_name+'_d_h2_conv')))
-    h3 = linear(tf.reshape(h2, [self.batch_size, -1]), self.num_class, self.model_name+'_d_h2_lin')
+        h0 = lrelu(conv2d(image, self.df_dim, name=self.model_name+'_d_h0_conv'))
+        h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim*2, name=self.model_name+'_d_h1_conv')))
+        h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name=self.model_name+'_d_h2_conv')))
+        h3 = linear(tf.reshape(h2, [self.batch_size, -1]), self.num_class, self.model_name+'_d_h2_lin')
 
-    return tf.nn.softmax(h3)
+        return tf.nn.softmax(h3)
 
   def generator(self, gen_x_dim = 26, gen_y_dim = 26, reuse = False):
 
-    if reuse:
-        tf.get_variable_scope().reuse_variables()
+    with tf.variable_scope('generator') as scope:
+        if reuse:
+            scope.reuse_variables()
 
-    n_network = self.net_size_g
-    gen_n_points = gen_x_dim * gen_y_dim
+        n_network = self.net_size_g
+        gen_n_points = gen_x_dim * gen_y_dim
 
-    z_scaled = tf.reshape(self.z, [self.batch_size, 1, self.z_dim]) * \
-                    tf.ones([gen_n_points, 1], dtype=tf.float32) * self.scale
-    z_unroll = tf.reshape(z_scaled, [self.batch_size*gen_n_points, self.z_dim])
-    x_unroll = tf.reshape(self.x, [self.batch_size*gen_n_points, 1])
-    y_unroll = tf.reshape(self.y, [self.batch_size*gen_n_points, 1])
-    r_unroll = tf.reshape(self.r, [self.batch_size*gen_n_points, 1])
+        z_scaled = tf.reshape(self.z, [self.batch_size, 1, self.z_dim]) * \
+                        tf.ones([gen_n_points, 1], dtype=tf.float32) * self.scale
+        z_unroll = tf.reshape(z_scaled, [self.batch_size*gen_n_points, self.z_dim])
+        x_unroll = tf.reshape(self.x, [self.batch_size*gen_n_points, 1])
+        y_unroll = tf.reshape(self.y, [self.batch_size*gen_n_points, 1])
+        r_unroll = tf.reshape(self.r, [self.batch_size*gen_n_points, 1])
 
-    U = fully_connected(z_unroll, n_network, self.model_name+'_g_0_z') + \
-        fully_connected(x_unroll, n_network, self.model_name+'_g_0_x', with_bias = False) + \
-        fully_connected(y_unroll, n_network, self.model_name+'_g_0_y', with_bias = False) + \
-        fully_connected(r_unroll, n_network, self.model_name+'_g_0_r', with_bias = False)
+        U = fully_connected(z_unroll, n_network, self.model_name+'_g_0_z') + \
+            fully_connected(x_unroll, n_network, self.model_name+'_g_0_x', with_bias = False) + \
+            fully_connected(y_unroll, n_network, self.model_name+'_g_0_y', with_bias = False) + \
+            fully_connected(r_unroll, n_network, self.model_name+'_g_0_r', with_bias = False)
 
-    #H = tf.nn.relu(U)
-    H = tf.nn.tanh(U)
+        #H = tf.nn.relu(U)
+        H = tf.nn.tanh(U)
 
-    for i in range(0, self.net_depth_g):
-      H0 = H
-      for j in range(0, self.subnet_depth_g):
-        H0 = tf.nn.relu(fully_connected(H0, n_network, self.model_name+'_g_relu_skip_'+str(i)+'_'+str(j), stddev = 1.0))
-      H0 = tf.nn.tanh(fully_connected(H0, n_network, self.model_name+'_g_tanh_skip_'+str(i), stddev = 0.001))
-      H = H + H0
+        for i in range(0, self.net_depth_g):
+          H0 = H
+          for j in range(0, self.subnet_depth_g):
+            H0 = tf.nn.relu(fully_connected(H0, n_network, self.model_name+'_g_relu_skip_'+str(i)+'_'+str(j), stddev = 1.0))
+          H0 = tf.nn.tanh(fully_connected(H0, n_network, self.model_name+'_g_tanh_skip_'+str(i), stddev = 0.001))
+          H = H + H0
 
-    output = tf.sigmoid(fully_connected(H, self.c_dim, self.model_name+'_g_'+str(self.net_depth_g)))
+        output = tf.sigmoid(fully_connected(H, self.c_dim, self.model_name+'_g_'+str(self.net_depth_g)))
 
-    result = tf.reshape(output, [self.batch_size, gen_y_dim, gen_x_dim, self.c_dim])
+        result = tf.reshape(output, [self.batch_size, gen_y_dim, gen_x_dim, self.c_dim])
 
-    return result
+        return result
 
 
   def partial_train(self, batch, label):
@@ -399,7 +401,7 @@ class CPPNVAE():
   def load_model(self, checkpoint_path):
 
     ckpt = tf.train.get_checkpoint_state(checkpoint_path)
-    print "loading model: ",ckpt.model_checkpoint_path
+    print("loading model: ",ckpt.model_checkpoint_path)
 
     #self.saver.restore(self.sess, checkpoint_path+'/'+ckpt.model_checkpoint_path)
     # use the below line for tensorflow 0.7

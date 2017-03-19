@@ -4,7 +4,9 @@ import tensorflow as tf
 import argparse
 import time
 import os
-import cPickle
+import pickle
+
+from tqdm import trange
 
 from mnist_data import *
 from model import CPPNVAE
@@ -59,8 +61,8 @@ def train(args):
   if not os.path.exists(dirname):
     os.makedirs(dirname)
 
-  with open(os.path.join(dirname, 'config.pkl'), 'w') as f:
-    cPickle.dump(args, f)
+  with open(os.path.join(dirname, 'config.pkl'), 'wb') as f:
+    pickle.dump(args, f)
 
   mnist = read_data_sets()
   n_samples = mnist.num_examples
@@ -87,7 +89,7 @@ def train(args):
     mnist.shuffle_data()
     total_batch = int(n_samples / batch_size)
     # Loop over all batches
-    for i in range(total_batch):
+    for i in trange(total_batch):
       batch_images, batch_labels = mnist.next_batch(batch_size, with_label = True) # obtain training labels
 
       d_loss, g_loss, vae_loss, n_operations, d_real_accuracy, d_fake_accuracy, g_accuracy, d_loss_real, d_loss_fake = cppnvae.partial_train(batch_images, batch_labels)
@@ -103,7 +105,7 @@ def train(args):
 
       # Display logs per epoch step
       if (counter+1) % display_step == 0:
-        print "Sample:", '%d' % ((i+1)*batch_size), " Epoch:", '%d' % (epoch), \
+        print("Sample:", '%d' % ((i+1)*batch_size), " Epoch:", '%d' % (epoch), \
               "d_loss=", "{:.4f}".format(d_loss), \
               "d_real=", "{:.4f}".format(d_loss_real), \
               "d_fake=", "{:.4f}".format(d_loss_fake), \
@@ -112,7 +114,7 @@ def train(args):
               "d_real_accuracy=", "{:.2f}".format(d_real_accuracy), \
               "d_fake_accuracy=", "{:.2f}".format(d_fake_accuracy), \
               "g_accuracy=", "{:.2f}".format(g_accuracy), \
-              "n_op=", '%d' % (n_operations)
+              "n_op=", '%d' % (n_operations))
       counter += 1
       # Compute average loss
       avg_d_loss += d_loss / n_samples * batch_size
@@ -126,7 +128,7 @@ def train(args):
 
     # Display logs per epoch step
     if epoch >= 0:
-      print "Epoch:", '%04d' % (epoch), \
+      print("Epoch:", '%04d' % (epoch), \
             "avg_d_loss=", "{:.6f}".format(avg_d_loss), \
             "avg_d_real=", "{:.6f}".format(avg_d_loss_real), \
             "avg_d_fake=", "{:.6f}".format(avg_d_loss_fake), \
@@ -134,13 +136,13 @@ def train(args):
             "d_real_accuracy=", "{:.2f}".format(avg_d_real_accuracy), \
             "d_fake_accuracy=", "{:.2f}".format(avg_d_fake_accuracy), \
             "g_accuracy=", "{:.2f}".format(avg_g_accuracy), \
-            "avg_vae_loss=", "{:.6f}".format(avg_vae_loss)
+            "avg_vae_loss=", "{:.6f}".format(avg_vae_loss))
 
     # save model
     if epoch >= 0 and epoch % checkpoint_step == 0:
       checkpoint_path = os.path.join('save', 'model.ckpt')
       cppnvae.save_model(checkpoint_path, epoch)
-      print "model saved to {}".format(checkpoint_path)
+      print("model saved to {}".format(checkpoint_path))
 
   # save model one last time, under zero label to denote finish.
   cppnvae.save_model(checkpoint_path, 0)
